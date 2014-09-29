@@ -28,9 +28,9 @@ description:
 version_added: "1.1"
 options:
   command:
-    choices: [ 'cleanup', 'collectstatic', 'flush', 'loaddata', 'migrate', 'runfcgi', 'syncdb', 'test', 'validate', ]
+    choices: [ 'cleanup', 'collectstatic', 'createcachetable', 'flush', 'loaddata', 'migrate', 'runfcgi', 'syncdb', 'test', 'validate', ]
     description:
-      - The name of the Django management command to run. Built in commands are cleanup, collectstatic, flush, loaddata, migrate, runfcgi, syncdb, test, and validate.
+      - The name of the Django management command to run. Built in commands are C(cleanup), C(collectstatic), C(createcachetable), C(flush), C(loaddata), C(migrate), C(runfcgi), C(syncdb), C(test), and C(validate).
       - Other commands can be entered, but will fail if they're unknown to Django.  Other commands that may prompt for user input should be run with the I(--noinput) flag.
     required: true
   app_path:
@@ -39,57 +39,81 @@ options:
     required: true
   settings:
     description:
-      - The Python path to the application's settings module, such as 'myapp.settings'.
+      - The Python path to the application's settings module, such as I(myapp.settings).
     required: false
+    default: None
   pythonpath:
     description:
       - A directory to add to the Python path. Typically used to include the settings module if it is located external to the application directory.
     required: false
+    default: None
   virtualenv:
     description:
       - An optional path to a I(virtualenv) installation to use while running the manage application.
     required: false
+    default: None
   apps:
     description:
-      - A list of space-delimited apps to target. Used by the 'test' command.
+      - A list of space-delimited apps to target. Used by the C(test) command.
     required: false
+    default: None
   cache_table:
     description:
-      - The name of the table used for database-backed caching. Used by the 'createcachetable' command.
+      - The name of the table used for database-backed caching. Used by the C(createcachetable) command.
     required: false
+    default: None
   database:
     description:
-      - The database to target. Used by the 'createcachetable', 'flush', 'loaddata', and 'syncdb' commands.
+      - The database to target. Used by the C(createcachetable), C(flush), C(loaddata), and C(syncdb) commands.
     required: false
+    default: None
   failfast:
     description:
-      - Fail the command immediately if a test fails. Used by the 'test' command.
+      - Fail the command immediately if a test fails. Used by the C(test) command.
     required: false
     default: "no"
     choices: [ "yes", "no" ]
   fixtures:
     description:
-      - A space-delimited list of fixture file names to load in the database. B(Required) by the 'loaddata' command.
+      - A space-delimited list of fixture file names to load in the database. B(Required) by the C(loaddata) command.
     required: false
+    default: None
   skip:
     description:
-     - Will skip over out-of-order missing migrations, you can only use this parameter with I(migrate)
+     - Will skip over out-of-order missing migrations, you can only use this parameter with C(migrate)
     required: false
+    default: None
     version_added: "1.3"
+  fake:
+    description:
+     - Will fake all migrations in database, you can only use this parameter with C(migrate) command
+     required: false
+     version_added: "2.0"
+     default: "no"
+     choices: [ "yes", "no" ]
+  all:
+    description:
+     - Will sync all applications in database, you can only use this parameter with C(syncdb) command
+     required: false
+     version_added: "2.0"
+     default: "no"
+     choices: [ "yes", "no" ]
   merge:
     description:
-     - Will run out-of-order or missing migrations as they are not rollback migrations, you can only use this parameter with 'migrate' command
+     - Will run out-of-order or missing migrations as they are not rollback migrations, you can only use this parameter with C(migrate) command
     required: false
+    default: None
     version_added: "1.3"
   link:
     description:
-     - Will create links to the files instead of copying them, you can only use this parameter with 'collectstatic' command
+     - Will create links to the files instead of copying them, you can only use this parameter with C(collectstatic) command
     required: false
+    default: None
     version_added: "1.3"
 notes:
    - I(virtualenv) (U(http://www.virtualenv.org)) must be installed on the remote host if the virtualenv parameter is specified.
    - This module will create a virtualenv if the virtualenv parameter is specified and a virtualenv does not already exist at the given location.
-   - This module assumes English error messages for the 'createcachetable' command to detect table existence, unfortunately.
+   - This module assumes English error messages for the C(createcachetable) command to detect table existence, unfortunately.
    - To be able to use the migrate command with django versions < 1.7, you must have south installed and added as an app in your settings
    - To be able to use the collectstatic command, you must have enabled staticfiles in your settings
 requirements: [ "virtualenv", "django" ]
@@ -114,7 +138,7 @@ EXAMPLES = """
 # Run the SmokeTest test case from the main app. Useful for testing deploys.
 - django_manage: command=test app_path={{ django_dir }} apps=main.SmokeTest
 
-# Create an initial superuser. 
+# Create an initial superuser.
 - django_manage: command="createsuperuser --noinput --username=admin --email=admin@example.com" app_path={{ django_dir }}
 """
 
@@ -174,10 +198,10 @@ def main():
         createcachetable=('cache_table', 'database', ),
         flush=('database', ),
         loaddata=('database', 'fixtures', ),
-        syncdb=('database', ),
+        syncdb=('database', 'all'),
         test=('failfast', 'testrunner', 'liveserver', 'apps', ),
         validate=(),
-        migrate=('apps', 'skip', 'merge', 'database',),
+        migrate=('apps', 'skip', 'merge', 'database', 'fake'),
         collectstatic=('link', ),
         )
 
@@ -200,7 +224,8 @@ def main():
 
     # These params are automatically added to the command if present
     general_params = ('settings', 'pythonpath', 'database',)
-    specific_boolean_params = ('failfast', 'skip', 'merge', 'link')
+    specific_boolean_params = ('failfast', 'skip', 'merge', 'link', 'all',
+                               'fake')
     end_of_command_params = ('apps', 'cache_table', 'fixtures')
 
     module = AnsibleModule(
@@ -221,6 +246,8 @@ def main():
             skip        = dict(default=None, required=False, type='bool'),
             merge       = dict(default=None, required=False, type='bool'),
             link        = dict(default=None, required=False, type='bool'),
+            all         = dict(default=False, required=False, type='bool'),
+            fake        = dict(default=False, required=False, type='bool'),
         ),
     )
 
@@ -230,8 +257,6 @@ def main():
 
     for param in specific_params:
         value = module.params[param]
-        if param in specific_boolean_params:
-            value = module.boolean(value)
         if value and param not in command_allowed_param_map[command]:
             module.fail_json(msg='%s param is incompatible with command=%s' % (param, command))
 
@@ -251,7 +276,7 @@ def main():
             cmd = '%s --%s=%s' % (cmd, param, module.params[param])
 
     for param in specific_boolean_params:
-        if module.boolean(module.params[param]):
+        if module.params[param]:
             cmd = '%s --%s' % (cmd, param)
 
     # these params always get tacked on the end of the command
